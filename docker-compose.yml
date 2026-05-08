@@ -1,0 +1,81 @@
+version: '3.9'
+
+services:
+  # MongoDB Database
+  mongodb:
+    image: mongo:7.0-alpine
+    container_name: chatgpt_mongodb
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: password123
+      MONGO_INITDB_DATABASE: chatgpt
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+      - mongodb_config:/data/configdb
+    networks:
+      - chatgpt_network
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+
+  # Express Backend Server
+  server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: chatgpt_server
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - MONGODB_URI=mongodb://admin:password123@mongodb:27017/chatgpt?authSource=admin
+      - JWT_SECRET=your_jwt_secret_key_change_this
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - IMAGEKIT_PUBLIC_KEY=${IMAGEKIT_PUBLIC_KEY}
+      - IMAGEKIT_PRIVATE_KEY=${IMAGEKIT_PRIVATE_KEY}
+      - IMAGEKIT_URL_ENDPOINT=${IMAGEKIT_URL_ENDPOINT}
+      - STRIPE_API_KEY=${STRIPE_API_KEY}
+      - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET}
+      - SVIX_WEBHOOK_SECRET=${SVIX_WEBHOOK_SECRET}
+    ports:
+      - "3000:3000"
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    networks:
+      - chatgpt_network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000', (r) => {if (r.statusCode !== 200) throw new Error(r.statusCode)})"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # React Frontend Client
+  client:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+    container_name: chatgpt_client
+    ports:
+      - "80:80"
+    depends_on:
+      - server
+    networks:
+      - chatgpt_network
+    restart: unless-stopped
+    environment:
+      - VITE_API_BASE_URL=http://localhost:3000/api
+
+volumes:
+  mongodb_data:
+  mongodb_config:
+
+networks:
+  chatgpt_network:
+    driver: bridge
