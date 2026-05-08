@@ -1,7 +1,7 @@
 services:
   # MongoDB Database
   mongodb:
-    image: mongo:7.0
+    image: mongo:latest
     container_name: chatgpt_mongodb
     environment:
       MONGO_INITDB_ROOT_USERNAME: admin
